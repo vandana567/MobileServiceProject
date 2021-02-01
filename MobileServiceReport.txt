@@ -1,0 +1,296 @@
+//mobileServiceTest
+package com.infy.test;
+import java.util.Arrays;
+
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+
+import com.infy.exception.MobileServiceException;
+import com.infy.model.ServiceRequest;
+import com.infy.service.MobileService;
+import com.infy.service.MobileServiceImpl;
+
+public class MobileServiceTest {
+
+    private MobileService mobileService= new MobileServiceImpl();
+    
+    @Test
+	public void registerRequestInvalidBrandTest() {
+		//your code goes here
+		ServiceRequest obj = new ServiceRequest("abc", Arrays.asList("Battery"), 9876543210L,"John",3214567890123456L);
+		MobileServiceException exception=Assertions.assertThrows(MobileServiceException.class, ()->mobileService.registerRequest(obj));
+		Assertions.assertEquals("Validator.INVALID_BRAND", exception.getMessage());
+	}
+
+	@Test
+    public void registerRequestInvalidContactNumberTest() {
+		//your code goes here
+		ServiceRequest obj = new ServiceRequest("Abc", Arrays.asList("Battery"), 983210L,"John",3214567890123456L);
+		MobileServiceException exception=Assertions.assertThrows(MobileServiceException.class, ()->mobileService.registerRequest(obj));
+		Assertions.assertEquals("Validator.INVALID_CONTACT_NUMBER", exception.getMessage());
+	}
+
+	@Test
+	public void registerRequestInvalidIssuesTest() {
+		//your code goes here
+		ServiceRequest obj = new ServiceRequest("Abc", Arrays.asList("Broken Screen"), 9876543210L,"John",3214567890123456L);
+		MobileServiceException exception=Assertions.assertThrows(MobileServiceException.class, ()->mobileService.registerRequest(obj));
+		Assertions.assertEquals("Service.INVALID_ISSUES", exception.getMessage());
+	}
+
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//Validator
+
+package com.infy.validator;
+
+import java.util.List;
+
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
+import com.infy.exception.MobileServiceException;
+import com.infy.model.ServiceRequest;
+
+
+public class Validator {
+	Log logger= LogFactory.getLog(Validator.class);
+
+	public void validate(ServiceRequest service) throws MobileServiceException{	
+		//your code goes here
+		try {
+		if(!isValidBrand(service.getBrand())) {
+			throw new MobileServiceException("Validator.INVALID_BRAND");
+		}
+		if(!isValidIssues(service.getIssues())) {
+			throw new MobileServiceException("Validator.INVALID_NO_OF_ISSUES");
+		}
+		if(!isValidIMEINumber(service.getiMEINumber())) {
+			throw new MobileServiceException("Validator.INVALID_IMEI_NUMBER");
+		}
+		if(!isValidContactNumber(service.getContactNumber())) {
+			throw new MobileServiceException("Validator.INVALID_CONTACT_NUMBER");
+		}
+		if(!isValidCustomerName(service.getCustomerName())) {
+			throw new MobileServiceException("Validator.INVALID_CUSTOMER_NAME");
+		}
+		}catch (MobileServiceException e) {
+			// TODO: handle exception
+			logger.error(e.getMessage(),e);
+			throw e;			
+		}
+	}	
+
+	
+	// validates the brand
+	// brand should always start with a upper case alphabet 
+	// and can be followed by one or more alphabets (lower case or upper case) 
+	public Boolean isValidBrand(String brand){
+		String regex = "([A-Z])([A-Za-z])+{2,}";
+		if(brand.matches(regex))
+		return true;
+		else return false;
+	}
+	
+	
+	// validates the list of issues
+	// checks if the list is null or empty
+	public Boolean isValidIssues(List<String> issues) {
+		if(issues==null || issues.isEmpty())
+			   return false;
+			else return true;
+	}
+
+	// validates the IMEINumber
+	// it should be a 16 digit number 
+	public Boolean isValidIMEINumber(Long iMEINumber) {
+		String check = Long.toString(iMEINumber);
+		if(check.length()==16)
+			return true;
+		return false;
+	}
+	
+	// validates the contact number
+	// should contain 10 numeric characters and should not contain 10 repetitive characters
+	public Boolean isValidContactNumber(Long contactNumber) {
+		String check = Long.toString(contactNumber);
+		String regex = "([0-9]{10})";
+		String regexAvoid = "([0-9])\\1{9}";
+		if(check.matches(regexAvoid))
+			return false;
+		else if(check.matches(regex))
+			return true;
+		return false;
+	}
+	
+	
+	// validates the customer name
+	// should contain at least one word and each word separated by a single space should contain at least one letter.
+	// the first letter of every word should be an upper case character 
+	public Boolean isValidCustomerName(String customerName) {
+		String regex="(([A-Z])([a-z])+([\\s]?))+";
+		if(customerName.matches(regex))
+		return true;
+		else return false;
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//MobileServiceImpl
+package com.infy.service;
+(import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
+import com.infy.dao.MobileServiceDAO;
+import com.infy.dao.MobileServiceDAOImpl;
+import com.infy.exception.MobileServiceException;
+import com.infy.model.ServiceReport;
+import com.infy.model.ServiceRequest;
+import com.infy.model.Status;
+import com.infy.validator.Validator;
+
+public class MobileServiceImpl implements MobileService{
+	
+	private MobileServiceDAO dao;	
+	private Validator validator;
+	
+	public MobileServiceImpl() {
+		 this.dao =  new MobileServiceDAOImpl();
+		this.validator= new Validator();
+	}
+	@Override
+	public ServiceRequest registerRequest(ServiceRequest service) throws MobileServiceException {
+		Log logger=LogFactory.getLog(MobileServiceImpl.class);
+		validator.validate(service);
+		try {
+		
+		
+		Float serviceFee = calculateEstimateCost(service.getIssues());
+		if(serviceFee<=0F) {
+			throw new MobileServiceException("Service.INVALID_ISSUES");			
+		}
+		else {
+			service.setServiceFee(serviceFee);
+			service.setStatus(Status.ACCEPTED);
+			service.setTimeOfRequest(LocalDateTime.now());
+		}
+		
+		ServiceRequest obj = dao.registerRequest(service);		
+		
+		return obj;
+	}catch (MobileServiceException e) {
+		// TODO: handle exception
+		logger.error(e.getMessage(), e);
+		throw e;
+	}
+	}	
+
+	@Override
+	public Float calculateEstimateCost(List<String> issues) throws MobileServiceException {
+		Float total=0F;
+		Iterator<String> itr = issues.iterator();
+		while(itr.hasNext()) {
+			switch(itr.next().toLowerCase()) {
+			case "battery":total=total+10F;break;
+			case "camera" :total=total+5F;break;
+			case "screen":total+=15.0F;break;
+			
+			}
+		}
+		
+		return total;
+	}
+
+	@Override
+	public List<ServiceReport> getServices(Status status) throws MobileServiceException {
+		Log logger=LogFactory.getLog(MobileServiceImpl.class);
+		try {
+		List<ServiceReport> report=new ArrayList<ServiceReport>();
+		List<ServiceRequest> servicesList=dao.getServices();
+		servicesList.stream().filter(sr->sr.getStatus().equals(status))
+                .forEach(sr->report.add(new ServiceReport(sr.getServiceId(), sr.getBrand(), sr.getIssues(), sr.getServiceFee())));
+		
+//		Iterator<ServiceRequest> itr=servicesList.iterator();		
+//		while(itr.hasNext()) {
+//			ServiceRequest temp = itr.next();
+//			if(temp.getStatus()==status) {
+//				report.add(new ServiceReport(temp.getServiceId(), temp.getBrand(), temp.getIssues(), temp.getServiceFee()));
+//			}
+//		}
+		
+		if(report.isEmpty()) {
+			throw new MobileServiceException("Service.NO_RECORDS_FOUND");
+		}
+		
+		
+		return report;
+	}catch (MobileServiceException e) {
+		// TODO: handle exception
+		logger.error(e.getMessage(), e);
+		throw e;
+	}
+	}	
+
+}
+
+//mobileServiceReport
+package com.infy.model;
+
+import java.util.List;
+
+public class ServiceReport {
+	
+	private Integer serviceId;
+	private String brand;
+	private List<String> issues;
+	private Float serviceFee;
+	
+	public ServiceReport(Integer serviceId,String brand,List<String> issues,Float serviceFee) {
+		this.serviceId=serviceId;
+		this.brand=brand;
+		this.issues=issues;
+		this.serviceFee=serviceFee;
+	}
+
+	public Integer getServiceId() {
+		return serviceId;
+	}
+
+	public void setServiceId(Integer serviceId) {
+		this.serviceId = serviceId;
+	}
+
+	public String getBrand() {
+		return brand;
+	}
+
+	public void setBrand(String brand) {
+		this.brand = brand;
+	}
+
+	public List<String> getIssues() {
+		return issues;
+	}
+
+	public void setIssues(List<String> issues) {
+		this.issues = issues;
+	}
+
+	public Float getServiceFee() {
+		return serviceFee;
+	}
+
+	public void setServiceFee(Float serviceFee) {
+		this.serviceFee = serviceFee;
+	}
+	
+	
+}
